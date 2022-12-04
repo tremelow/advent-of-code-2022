@@ -8,6 +8,6 @@ mod day04;
 fn main() {
     let res = day04::main();
     println!("{res}");
-    // let res_bonus = day03::main_bonus();
-    // println!("{res_bonus}");
+    let res_bonus = day04::main_bonus();
+    println!("{res_bonus}");
 }
