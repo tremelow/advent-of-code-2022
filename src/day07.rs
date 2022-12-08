@@ -1,5 +1,6 @@
-use std::fs;
 use std::str::Lines;
+
+use std::fs;
 const INPUT_FILE: &str = "data/input07.txt";
 
 const TOTAL_DISK_SPACE: u32 = 70000000;
