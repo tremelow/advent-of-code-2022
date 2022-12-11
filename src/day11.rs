@@ -116,11 +116,6 @@ impl Monkey {
     }
 }
 
-fn perform_inspection(item: &mut Item, monkey: &mut Monkey) {
-    item.worry_level = monkey.op.apply(item.worry_level);
-    item.monkey = monkey.test.apply(item.worry_level);
-}
-
 pub fn main() -> u32 {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
@@ -148,7 +143,6 @@ pub fn main() -> u32 {
         for monkey_idx in 0..number_of_monkeys {
             activity[monkey_idx] += monkeys[monkey_idx].items.len() as u32;
             while let Some(item_idx) = monkeys[monkey_idx].items.pop_front() {
-                // perform_inspection(&mut item_pile[item_idx], &mut monkeys[monkey_idx]);
                 item_pile[item_idx].worry_level = monkeys[monkey_idx].op.apply(item_pile[item_idx].worry_level);
                 item_pile[item_idx].worry_level /= 3;
                 item_pile[item_idx].monkey = monkeys[monkey_idx].test.apply(item_pile[item_idx].worry_level);
