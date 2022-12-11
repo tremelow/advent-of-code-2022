@@ -1,8 +1,9 @@
-use std::{fs, ops::{AddAssign, Sub}};
+use std::fs;
 const INPUT_FILE: &str = "data/input09.txt";
 
 use nalgebra::{DMatrix, Vector2};
 use ndarray::AssignElem;
+use std::ops::{AddAssign, Sub};
 use std::cmp::{min,max};
 
 const L: Vector2<i32> = Vector2::new(-1, 0);
