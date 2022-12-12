@@ -1,22 +1,19 @@
-use std::ops::Index;
-use std::{fs, hash::Hash};
-const INPUT_FILE: &str = "data/test12.txt";
+use std::fs;
+const INPUT_FILE: &str = "data/input12.txt";
 
-// use std::collections::HashSet;
 use itertools::Itertools;
 use nalgebra::DMatrix;
-use petgraph::graph::{node_index, NodeIndex, UnGraph};
-use petgraph::graphmap::UnGraphMap;
-use petgraph::data::FromElements;
+use petgraph::graphmap::DiGraphMap;
 use petgraph::algo::dijkstra;
-use petgraph::dot::{Dot, Config};
+// use petgraph::dot::{Dot, Config};
+use std::cmp::{max,min};
 
 type MatIndex = (usize,usize);
 
 fn char_to_altitude(c: char) -> u32 {
     return match (c, c.is_lowercase()) {
-        ('S',_) => 0,
-        ('E',_) => 27,
+        ('S',_) => 1,
+        ('E',_) => 26,
         (c, true) => c.to_digit(36).unwrap().abs_diff(9),
         (_,_) => u32::MAX,
     };
@@ -29,9 +26,11 @@ fn add_edge_if_valid(
     graph_edges: &mut Vec<(MatIndex,MatIndex)>) 
 {
     let d1 = idx2.0.abs_diff(idx1.0);
-    let d2 = idx2.1.abs_diff(idx1.0);
-    if (d1 + d2) != 0 && d1*d2 == 0 && altitudes[idx1].abs_diff(altitudes[idx2]) <= 1 {
-        graph_edges.push((idx1,idx2));
+    let d2 = idx2.1.abs_diff(idx1.1);
+    if (d1 + d2) != 0 && d1 * d2 == 0 {
+        if altitudes[idx2] <= altitudes[idx1] + 1 {
+            graph_edges.push((idx1,idx2));
+        }
     }
 }
 
@@ -42,50 +41,66 @@ pub fn main() -> u32 {
     let data = contents.lines().map(|l| l.trim().chars().collect_vec()).collect_vec();
     let (nrows, ncols) = (data.len(), data[0].len());
 
-    // Converts Cartesian coordinates to linear ones
-    let cart_to_lin = |(i,j): MatIndex| i*ncols + j;
-    let lin_to_cart = |i: usize| ((i/ncols), i%ncols);
-
-    let altitudes = DMatrix::from_fn(nrows,ncols, |i,j| char_to_altitude(data[i][j]));
+    let data = DMatrix::from_fn(nrows, ncols, |i,j| data[i][j]);
+    let altitudes = data.map(char_to_altitude);
+    
+    // println!("{} becomes {}", data, altitudes);
+    
     let mut graph_edges = Vec::new();
-
-    println!("{}", altitudes);
-
-    for i in 0..(nrows-1) {
-        add_edge_if_valid((i,0), (i+1,0), &altitudes, &mut graph_edges);
-        for j in 0..(ncols-1) {
-            add_edge_if_valid((i,j), (i,j+1), &altitudes, &mut graph_edges);
-            add_edge_if_valid((i,j), (i+1,j), &altitudes, &mut graph_edges);
+    for i in 0..nrows {
+        for j in 0..ncols {
+            let u = (max(1,i)-1, j);
+            let d = (min(nrows-1,i+1), j);
+            let l = (i, max(1,j)-1);
+            let r = (i, min(ncols-1,j+1));
+            for n in [u,d,l,r] {
+                add_edge_if_valid((i,j), n, &altitudes, &mut graph_edges);
+            }
         }
     }
 
-    // // Weirdly, this doesn't work (generating a graph from a vec of edges of type (i32,i32))
-    let e = graph_edges.iter().map(|(i1,i2)| (cart_to_lin(*i1) as i32, cart_to_lin(*i2) as i32)).collect_vec();
-    // let g = UnGraph::<i32,()>::from_edges(&e);
-    // // but this works (generating a graph from a vec of edges of type (i32,i32))....
-    // let x = vec![(1, 2), (2, 3), (3, 4), (1, 4)];
-    // let g = UnGraph::<i32, ()>::from_edges(&x);
-
-    let g = UnGraphMap::<MatIndex, ()>::from_edges(&graph_edges);
+    let g = DiGraphMap::<MatIndex, ()>::from_edges(&graph_edges);
     // println!("{:?}", Dot::with_config(&g, &[Config::EdgeNoLabel]));
-    let node_map = dijkstra(&g, (0,0), Some((3,6)), |_| 1);
-    println!("{:?}", node_map);
 
-    // So we have to do a long workaround D:
-    // let mut g = UnGraph::<MatIndex, ()>::new_undirected();
-    // let cart_to_node = DMatrix::from_fn(nrows, ncols, |i,j| NodeIndex::<u32>::new(cart_to_lin((i,j))));
-    // println!("{:?}", cart_to_node);
-    // for i in 0..nrows {
-    //     for j in 0..ncols {
-    //         g.add_node((i,j));
-    //         // // We can check the identity
-    //         // let x = g.add_node((i,j));
-    //         // println!("{:?} == {:?}? {}", cart_to_node[(i,j)], x, cart_to_node[(i,j)] == x);
-    //     }
-    // }
-    // for (idx1, idx2) in graph_edges.iter() {
-    //     g.add_edge(cart_to_node[*idx1], cart_to_node[*idx2], ());
-    // }
+    let start_node = (0..nrows).cartesian_product(0..ncols).find(|(i,j)| data[(*i,*j)] == 'S').unwrap();
+    let end_node = (0..nrows).cartesian_product(0..ncols).find(|(i,j)| data[(*i,*j)] == 'E').unwrap();
+    let node_map = dijkstra(&g, start_node, Some(end_node), |_| 1);
 
-    return 0;
+    return node_map[&end_node];
+}
+
+pub fn main_bonus() -> u32 {
+    let contents = fs::read_to_string(INPUT_FILE)
+        .expect("Should have been able to read the file.");
+
+    let data = contents.lines().map(|l| l.trim().chars().collect_vec()).collect_vec();
+    let (nrows, ncols) = (data.len(), data[0].len());
+
+    let data = DMatrix::from_fn(nrows, ncols, |i,j| data[i][j]);
+    let altitudes = data.map(char_to_altitude);
+        
+    let mut graph_edges = Vec::new();
+    for (i,j) in (0..nrows).cartesian_product(0..ncols) {
+        let u = (max(1,i)-1, j);
+        let d = (min(nrows-1,i+1), j);
+        let l = (i, max(1,j)-1);
+        let r = (i, min(ncols-1,j+1));
+        for n in [u,d,l,r] {
+            add_edge_if_valid((i,j), n, &altitudes, &mut graph_edges);
+        }
+    }
+
+    let reversed_edges = graph_edges.iter().map(|&(i1,i2)| (i2,i1));
+    let g = DiGraphMap::<MatIndex, ()>::from_edges(reversed_edges);
+    // println!("{:?}", Dot::with_config(&g, &[Config::EdgeNoLabel]));
+
+    let start_node = (0..nrows).cartesian_product(0..ncols).find(|(i,j)| data[(*i,*j)] == 'E').unwrap();
+    let node_map = dijkstra(&g, start_node, None, |_| 1);
+
+    let shortest_hike = (0..nrows).cartesian_product(0..ncols)
+        .filter(|i| data[*i] == 'a')
+        .map(|i| *node_map.get(&i).unwrap_or(&u32::MAX))
+        .min().unwrap();
+
+    return shortest_hike;
 }
