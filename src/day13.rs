@@ -1,24 +1,54 @@
 use std::fs;
-const INPUT_FILE: &str = "data/test13.txt";
+const INPUT_FILE: &str = "data/input13.txt";
 
 use itertools::Itertools;
 use nom::{
-    Err, IResult,
+    Err, IResult, Parser,
     branch::alt,
     bytes::complete::tag,
-    sequence::{delimited, terminated},
-    multi::{fold_many0, many0, separated_list0, separated_list1},
-    character::complete::digit0,
-    error::{Error, ErrorKind, ParseError},
+    character::complete::digit1,
+    combinator::recognize,
+    error::{Error, ErrorKind, ParseError}, 
+    multi::separated_list0,
+    sequence::delimited,
 };
+use std::cmp::{self,Ordering};
 
-#[derive(Debug)]
-enum List {
-    Number(i32),
-    NestedList(Vec<List>),
+#[derive(Debug, PartialEq, Eq)]
+enum NestedList<T: Copy> {
+    Elem(T),
+    List(Vec<NestedList<T>>),
 }
 
-pub fn take_until_unbalanced(
+impl<T> cmp::PartialOrd for NestedList<T> 
+    where T: PartialOrd + Copy 
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Self::Elem(n), Self::Elem(m)) => n.partial_cmp(m),
+            (Self::List(u), Self::List(v)) => u.partial_cmp(v),
+            (Self::Elem(n), Self::List(v)) => vec![Self::Elem(*n)].partial_cmp(v),
+            (Self::List(u), Self::Elem(m)) => u.partial_cmp(&vec![Self::Elem(*m)]),
+        }
+    }
+}
+
+impl<T> cmp::Ord for NestedList<T> 
+    where T: Ord + Copy 
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        println!("using custom comparator");
+        match (self, other) {
+            (Self::Elem(n), Self::Elem(m)) => n.cmp(m),
+            (Self::List(u), Self::List(v)) => u.cmp(v),
+            (Self::Elem(n), Self::List(v)) => vec![Self::Elem(*n)].cmp(v),
+            (Self::List(u), Self::Elem(m)) => u.cmp(&vec![Self::Elem(*m)]),
+        }
+    }
+}
+
+/// taken from https://github.com/Geal/nom/issues/1253
+fn take_until_unbalanced(
     opening_bracket: char,
     closing_bracket: char,
 ) -> impl Fn(&str) -> IResult<&str, &str> {
@@ -57,81 +87,72 @@ pub fn take_until_unbalanced(
     }
 }
 
-fn convert_to_list(s: &str) -> Option<List> {
-    let mut is_list = delimited(tag("["), take_until_unbalanced('[', ']'), tag("]"));
-    let mut parser = separated_list0(tag(","), alt((&mut is_list, digit0)));
-    // [1,1,3,1,1]
-    if s.is_empty() {
-        return None;
-    }
+
+/// Transforms s string list into a nested list, e.g.
+/// ```rust
+/// assert_eq!(convert_to_list("[1,2,3]"), List([Elem(1), Elem(2), Elem(3)]));
+/// assert_eq!(convert_to_list("[[1],[2]]"), List([List([Elem(1)]), List([Elem(2)])]));
+/// assert_eq!(convert_to_list("[[]]"), List([List([])]));
+/// ```
+/// Could probably be done using a single nom query, but uh... nom is hard.
+fn convert_to_list(s: &str) -> NestedList<i32> {
     if let Ok(n) = s.parse() {
-        return Some(List::Number(n));
+        return NestedList::Elem(n);
     }
+
+    let is_list = delimited(tag("["), take_until_unbalanced('[', ']'), tag("]"));
+    // can not borrow is_list, weirdly
+    let recognize_list = recognize(delimited(tag("["), take_until_unbalanced('[', ']'), tag("]")));
+    let mut separate_list_contents = is_list.and_then(separated_list0(tag(","), alt((digit1, recognize(recognize_list)))));
     // else 
-    if let Ok(("", v)) = parser(s) {
-        return Some(List::NestedList(v.into_iter().map(convert_to_list).filter(|x| x.is_some()).map(|x| x.unwrap()).collect_vec()));
+    if let Ok(("", v)) = separate_list_contents.parse(s) {
+        return NestedList::List(v.into_iter().map(convert_to_list).collect_vec());
     }
-    return None;
+
+    unreachable!();
 }
 
-fn recognize_integer(input: &str) -> IResult<&str, &str> {
-    digit0(input)
-}
-
-pub fn main() {
+pub fn main() -> usize {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
     let contents = contents.trim().split("\n\n");
 
-    let mut str_lhs = Vec::new();
-    let mut str_rhs = Vec::new();
     let mut lhs = Vec::new();
     let mut rhs = Vec::new();
 
     for to_compare in contents.clone() {
         let mut lists = to_compare.lines();
-        let lhs_list = lists.next().unwrap();
-        let rhs_list = lists.next().unwrap();
-        str_lhs.push(lhs_list);
-        lhs.push(convert_to_list(lhs_list));
-        str_rhs.push(lhs_list);
-        rhs.push(convert_to_list(rhs_list));
+        lhs.push(convert_to_list(lists.next().unwrap()));
+        rhs.push(convert_to_list(lists.next().unwrap()));
     }
 
-    for (v,s) in lhs.into_iter().map(|x| x.unwrap()).zip(str_lhs) {
-        println!("{:?}", s);
-        println!("{:?}", v);
-        println!();
-    }
+    let res = lhs.iter()
+        .zip(rhs.iter())
+        .enumerate()
+        .fold(0, |acc, (i, (l,r))| if l <= r {acc+i+1} else {acc});
 
-    let is_list = take_until_unbalanced('[', ']');
-    println!("{:?}", is_list("1"));
-    println!("{:?}", is_list("[1,2]"));
-    println!("{:?}", is_list("[1,2,[3,4],5]"));
-
-    // println!("{:?}", rhs);
-
-    let mut is_list = delimited(tag("["), take_until_unbalanced('[', ']'), tag("]"));
-    println!("{:?}", is_list("[1,2,[3,4],5]")); // Ok(("","1,2,[3,4],5"))
-    println!("{:?}", is_list("1,2,[3,4],5")); // Err
-    println!();
-    
-    let mut parser = separated_list0(tag(","), alt((&mut is_list, digit0)));
-    println!("{:?}", parser("[1,2,[3,[4,5]],6]")); // Ok(("", ["1,2,[3,[4,5]],6"]))
-    println!("{:?}", parser("1,2,[3,[4,5]],6")); // Ok(("", ["1", "2", "3,[4,5]", "6"]))
-    println!("{:?}", parser("1")); // Ok(("", ["1"]))
-    println!("{:?}", parser("[[]]")); // Ok(("", ["[]"]))
-    println!("{:?}", parser("[]")); // Ok(("", [""]))
-    println!();
-    drop(parser);
-
-    // let mut hmm = alt((is_list, terminated(digit0, tag(",")), digit0));
-    // println!("{:?}", hmm("1,2,[3,4]"));
-    // println!("{:?}", hmm("[3,4],5"));
-    // println!();
+    return res;
 }
 
-pub fn main_bonus() {
+pub fn main_bonus() -> usize {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
+
+    let mut lists = contents.split("\n\n")
+        .map(|s| s.lines()).flatten()
+        .map(convert_to_list)
+        .collect_vec();
+
+    let div_packet1 = convert_to_list("[[2]]");
+    let div_packet2 = convert_to_list("[[6]]");
+    lists.append(&mut vec![div_packet1, div_packet2]);
+    lists.sort();
+    
+    
+    let div_packet1 = convert_to_list("[[2]]");
+    let div_packet2 = convert_to_list("[[6]]");
+    let decoder_key = lists.iter().enumerate()
+        .fold(1, |acc, (i,l)| if *l == div_packet1 || *l == div_packet2 {acc * (i+1)} else {acc});
+
+    return decoder_key;
 }
