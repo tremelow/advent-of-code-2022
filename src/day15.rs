@@ -1,20 +1,19 @@
 use std::fs;
-const INPUT_FILE: &str = "data/test15.txt";
+const INPUT_FILE: &str = "data/input15.txt";
 
-const Y_LINE: i32 = 10;
+const Y_LINE: i32 = 2000000;
 
 use std::{
     ops::RangeInclusive, 
     cmp::{max, min}
 };
-use nom::bytes::complete::{take_while, take_till1};
-use nom::combinator::rest;
+use itertools::Itertools;
 use nom::multi::{count, many_till};
 use nom::sequence::{preceded, separated_pair};
 use nom::{self, 
     IResult,
     character::complete::digit1,
-    combinator::{map, map_res, not},
+    combinator::{map, map_res},
     bytes::complete::{tag, take},
 };
 
@@ -29,7 +28,9 @@ fn str_to_i32(input: &str) -> IResult<&str, i32> {
 type Interval = RangeInclusive<i32>;
 
 fn merge(i1: &Interval, i2: &Interval) -> Option<Interval> {
-    if i1.contains(i2.start()) || i2.contains(i1.start()) {
+    if i1.is_empty() || i2.is_empty() {
+        None
+    } else if i1.contains(i2.start()) || i2.contains(i1.start()) {
         Some(min(*i1.start(), *i2.start())..=max(*i1.end(), *i2.end()))//Some(min(*i1.start(),*i2.start())..=max(*i1.end(), *i2.end()))
     } else {
         None
@@ -85,9 +86,31 @@ impl DisjointUnion {
             self.push_non_empty_interval(i);
         }
     }
+
+    fn iter(&self) -> Iter {
+        Iter { at: Some(self) }
+    }
 }
 
-#[derive(Clone, Copy, Debug)]
+struct Iter<'a> {
+    at: Option<&'a DisjointUnion>
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a Interval;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.at.take() {
+            None => None,
+            Some(DisjointUnion::Empty) => None,
+            Some(DisjointUnion::Elem(i, next)) => {
+                self.at = Some(next.as_ref());
+                Some(i)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Position {
     x: i32,
     y: i32,
@@ -132,26 +155,35 @@ impl Sensor {
     fn range_on_yline(&self, y: i32) -> Interval {
         let distance_to_line = (y - self.position.y).abs();
         let range_s = self.distance_to_beacon();
-        let dy = range_s - distance_to_line;
-        return (self.position.y - dy)..=(self.position.y + dy);
+        let dx = range_s - distance_to_line;
+        return (self.position.x - dx)..=(self.position.x + dx);
     }
 }
 
 
 
-pub fn main() -> u32 {
+pub fn main() -> i32 {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
 
-    let mut no_beacon = DisjointUnion::new();
-    for l in contents.lines() {
-        let s = Sensor::new(l);
-        println!("{:?}", s);
-        no_beacon.push(s.range_on_yline(Y_LINE));
-    }
-    println!("{:#?}", no_beacon);
+    let sensors: Vec<Sensor> = contents.lines().map(|l| Sensor::new(l)).collect();
+    let ranges_on_line = sensors.iter()
+        .map(|s| s.range_on_yline(Y_LINE))
+        .fold(DisjointUnion::new(), 
+            |mut u, i| {u.push(i); u});
+    let size_visible_on_line: i32 = ranges_on_line.iter()
+        .filter(|i| !i.is_empty())
+        .map(|i| i.end() - i.start() + 1)
+        .sum();
+    let beacons_on_line = sensors.iter()
+        .map(|s| s.beacon)
+        .filter(|b| b.y == Y_LINE && ranges_on_line.iter().any(|i| i.contains(&b.x)))
+        .unique()
+        .count() as i32;
 
-    return 0;
+    let res = size_visible_on_line - beacons_on_line;
+
+    return res;
 }
 
 pub fn main_bonus() {
