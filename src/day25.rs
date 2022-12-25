@@ -59,63 +59,15 @@ fn aux_add_snafu<'a>(lhs: &mut IterSnafu, rhs: &mut IterSnafu, offset: i32) -> S
     return rest;
 }
 
-
-fn aux_snafu_to_decimal(dec: i32, snafu: &mut Chars) -> i32 {
-    if let Some(digit) = snafu.next() {
-        aux_snafu_to_decimal(5*dec + VAL[&digit], snafu)
-    } else {
-        dec
-    }
-}
-fn snafu_to_decimal(snafu: &str) -> i32 {
-    let mut c = snafu.chars();
-    return aux_snafu_to_decimal(0, &mut c);
-}
-
-fn aux_decimal_to_snafu(n: i32, snafu: &mut String) {
-    if n == 0 {
-        return ;
-    }
-    let i = ((n + 2) as usize) % 5;
-    let d = ((n+2) % 5) - 2;
-    let c = SNAFU[i];
-    snafu.push(c);
-    aux_decimal_to_snafu((n-d)/5, snafu);
-}
-fn decimal_to_snafu(n: i32) -> String {
-    let mut snafu = String::new();
-    aux_decimal_to_snafu(n, &mut snafu);
-    if snafu.is_empty() {
-        snafu.push('0');
-    }
-    // reverse the string
-    return snafu.chars().rev().fold(String::new(), |mut s, c| {s.push(c); s});
-}
-
 pub fn main() -> String {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
-    // for l in contents.lines() {
-    //     println!("{}", snafu_to_decimal(l));
-    // }
-    // let s1 = Snafu::from("1==");
-    // let s2 = Snafu::from("1=");
-    let mut res = Snafu::new();
-    let mut test = 0;
-    // for l in contents.lines() {
-    //     res = res + Snafu::from(l);
-    //     test = test + snafu_to_decimal(l);
-    //     println!("Reference method: {}", decimal_to_snafu(test));
-    //     println!("Tested method:    {}", res.0);
-    //     println!();
-    // }
-    
-    let res = contents.lines().map(Snafu::from).fold(Snafu::new(),|a,b| a+b);
 
+    let res = contents.lines().map(Snafu::from).fold(Snafu::new(),|a,b| a+b);
     return res.0;
 }
 
-pub fn main_bonus() {
-    let contents = fs::read_to_string(INPUT_FILE)
-        .expect("Should have been able to read the file.");
-}
+// pub fn main_bonus() {
+//     let contents = fs::read_to_string(INPUT_FILE)
+//         .expect("Should have been able to read the file.");
+// }
