@@ -20,6 +20,6 @@ mod day15;
 fn main() {
     let res = day15::main();
     println!("Result of the day: {}", res);
-    // let res_bonus = day15::main_bonus();
-    // println!("Bonus result of the day: {}", res_bonus);
+    let res_bonus = day15::main_bonus();
+    println!("Bonus result of the day: {}", res_bonus);
 }

@@ -1,10 +1,12 @@
 use std::fs;
 const INPUT_FILE: &str = "data/input15.txt";
 
-const Y_LINE: i32 = 2000000;
+const X_MAX: i32 = 4000000;
+const Y_MAX: i32 = 4000000;
+const Y_LINE: i32 = 10;
 
 use std::{
-    ops::RangeInclusive, 
+    ops::{Add, Sub, RangeInclusive}, 
     cmp::{max, min}
 };
 use itertools::Itertools;
@@ -87,16 +89,16 @@ impl DisjointUnion {
         }
     }
 
-    fn iter(&self) -> Iter {
-        Iter { at: Some(self) }
+    fn iter(&self) -> IterDisjointUnion {
+        IterDisjointUnion { at: Some(self) }
     }
 }
 
-struct Iter<'a> {
+struct IterDisjointUnion<'a> {
     at: Option<&'a DisjointUnion>
 }
 
-impl<'a> Iterator for Iter<'a> {
+impl<'a> Iterator for IterDisjointUnion<'a> {
     type Item = &'a Interval;
     fn next(&mut self) -> Option<Self::Item> {
         match self.at.take() {
@@ -116,51 +118,120 @@ struct Position {
     y: i32,
 }
 
-fn x_coordinate(input: &str) -> IResult<&str, i32> {
+fn parse_x_coordinate(input: &str) -> IResult<&str, i32> {
     preceded(tag("x="), str_to_i32)(input)
 }
-fn y_coordinate(input: &str) -> IResult<&str, i32> {
+fn parse_y_coordinate(input: &str) -> IResult<&str, i32> {
     preceded(tag("y="), str_to_i32)(input)
 }
-fn xy_coordinate(input: &str) -> IResult<&str, Position> {
-    map(separated_pair(x_coordinate, tag(", "), y_coordinate), |(x,y)| Position {x,y})(input)
+fn parse_xy_coordinate(input: &str) -> IResult<&str, Position> {
+    map(separated_pair(parse_x_coordinate, tag(", "), parse_y_coordinate), |(x,y)| Position {x,y})(input)
 }
-fn first_position(input: &str) -> IResult<&str, Position> {
-    map(many_till(take(1usize), xy_coordinate), |(_,p)| p)(input)
+fn parse_first_position(input: &str) -> IResult<&str, Position> {
+    map(many_till(take(1usize), parse_xy_coordinate), |(_,p)| p)(input)
+}
+
+impl Position {
+    fn new(x: i32 ,y: i32) -> Self {
+        return Position{x,y};
+    }
+    fn distance1(&self, other: &Self) -> i32 {
+        return (self.x - other.x).abs() + (self.y - other.y).abs();
+    }
+    fn norm1(&self) -> i32 {
+        return self.x.abs() + self.y.abs()
+    }
+}
+
+impl Add for Position {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Position{x: self.x + rhs.x, y: self.y + rhs.y}
+    }
+}
+impl Sub for Position {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Position{x: self.x - rhs.x, y: self.y - rhs.y}
+    }
 }
 
 #[derive(Debug)]
 struct Sensor {
     position: Position,
     beacon: Position,
+    range: i32,
 }
 
 impl Sensor {
     /// Create a new Sensor from a line of the form
     /// "Sensor at x=2, y=18: closest beacon is at x=-2, y=15"
     fn new(data: &str) -> Self {
-        if let Ok((_,v)) = count(first_position, 2)(data) {
+        if let Ok((_,v)) = count(parse_first_position, 2)(data) {
             let position = v[0];
             let beacon = v[1];
-            Sensor { position, beacon }
+            let range = position.distance1(&beacon);
+            Sensor { position, beacon, range }
         } else {
             unreachable!()
         }
     }
 
     fn distance_to_beacon(&self) -> i32 {
-        return (self.position.x - self.beacon.x).abs() + (self.position.y - self.beacon.y).abs();
+        return self.range;
     }
 
     fn range_on_yline(&self, y: i32) -> Interval {
         let distance_to_line = (y - self.position.y).abs();
-        let range_s = self.distance_to_beacon();
-        let dx = range_s - distance_to_line;
+        let dx = self.range - distance_to_line;
         return (self.position.x - dx)..=(self.position.x + dx);
+    }
+
+    /// Return an iterator which does one turn clockwise around the visibility 
+    /// perimeter of the sensor, starting from the lowermost point.
+    fn periphery(&self) -> IterPeriphery {
+        let center = self.position;
+        let start = center - Position::new(0,self.distance_to_beacon()+1);
+        let at = Some(start);
+        return IterPeriphery { start, center, at };
     }
 }
 
+struct IterPeriphery {
+    start: Position,
+    center: Position,
+    at: Option<Position>,
+}
 
+impl Iterator for IterPeriphery {
+    type Item = Position;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(p) = self.at {
+            let q = p - self.center;
+            // println!("{:?}", q);
+            // let dur = std::time::Duration::from_secs(1);
+            // std::thread::sleep(dur);
+            let new_p = p + clockwise_increment(q);
+            // println!("Reaching ({},{})", new_p.x, new_p.y);
+            if new_p != self.start {
+                self.at = Some(new_p);
+                return Some(new_p);
+            }
+        }
+        return None;
+    }
+}
+
+/// Perform one iteration of a turn clockwise, unless the starting point gets reached
+fn clockwise_increment(p: Position) -> Position {
+    match (p.x, p.y) {
+        (u,v) if u >= 0 && v < 0  => Position::new( 1, 1),
+        (u,v) if u > 0  && v >= 0 => Position::new(-1, 1),
+        (u,v) if u <= 0 && v > 0  => Position::new(-1,-1),
+        (u,v) if u < 0  && v <= 0 => Position::new( 1,-1),
+        (_,_) => unreachable!(),
+    }
+}
 
 pub fn main() -> i32 {
     let contents = fs::read_to_string(INPUT_FILE)
@@ -186,7 +257,14 @@ pub fn main() -> i32 {
     return res;
 }
 
-pub fn main_bonus() {
+pub fn main_bonus() -> u64 {
     let contents = fs::read_to_string(INPUT_FILE)
         .expect("Should have been able to read the file.");
+    let sensors = contents.lines().map(|l| Sensor::new(l)).collect_vec();
+    let beacon_position = sensors.iter().map(|s| s.periphery()).flatten()
+        .filter(|p| p.x >= 0 && p.y >= 0 && p.x <= X_MAX && p.y <= Y_MAX)
+        .find_or_first(|p| sensors.iter().all(|s| p.distance1(&s.position) > s.range))
+        .unwrap();
+
+    return (beacon_position.x as u64) * 4000000 + (beacon_position.y as u64);
 }
