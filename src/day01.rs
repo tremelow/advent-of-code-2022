@@ -1,18 +1,28 @@
 use std::fs;
 use std::cmp::max;
 
-pub fn main01_1() -> i64 {
+pub fn main01_1() -> i32 {
     let contents = fs::read_to_string("data/01.txt").expect("Should have been able to read the file.");
-    let mut loc_total = 0;
-    let mut max_total = 0;
-    for line in contents.lines() {
-        let loc : i64 = line.parse().unwrap_or(0);
-        loc_total += loc;
-        if loc == 0 {
-            max_total = max(max_total, loc_total);
-            loc_total = 0;
-        }
-    }
+
+    let max_total = contents
+        .split("\n\n")
+        .map(|s| 
+            s.lines()
+            .map(|x| x.parse::<i32>().unwrap())
+            .sum()
+        )
+        .max().unwrap();
+
+    // let mut loc_total = 0;
+    // let mut max_total = 0;
+    // for line in contents.lines() {
+    //     let loc: i32 = line.parse().unwrap_or(0);
+    //     loc_total += loc;
+    //     if loc == 0 {
+    //         max_total = max(max_total, loc_total);
+    //         loc_total = 0;
+    //     }
+    // }
     return max_total;
 }
 
