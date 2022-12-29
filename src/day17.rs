@@ -3,13 +3,13 @@ const INPUT_FILE: &str = "data/test17.txt";
 
 use std::iter::Cycle;
 use std::collections::VecDeque;
-use std::ops::{ShlAssign, ShrAssign};
-use std::cmp::{max,min};
+use std::cmp::max;
 
 use core::slice::Iter;
 use itertools::Itertools;
 
-const NUMBER_OF_ROCKS: u64 = 1_000_000;
+// const NUMBER_OF_ROCKS: u64 = 3;
+const NUMBER_OF_ROCKS: u64 = 2022;
 // const NUMBER_OF_ROCKS: u64 = 1_000_000_000_000;
 
 #[derive(Clone, Copy, Debug)]
@@ -59,7 +59,7 @@ impl Shape {
     }
     fn move_right(&mut self, obstacle: u32) {
         if !self.touches(RIGHT_WALL | (obstacle << 1)) { 
-            self.0 <<= 1; 
+            self.0 >>= 1; 
         }
     }
     fn to_string(&self) -> String {
@@ -170,22 +170,11 @@ fn add_shape_to_rock_formation(
 /// A spot is *accessible* if the spot above is accessible 
 /// **OR** the spot to its left *and* the one above it both are accessible
 /// **OR** the spot to its right *and* the one above it both are.
-fn update_accessibility(rock_formation: &mut VecDeque<u32>, check_depth: usize) {
-    let mut check_deeper = false;
-    for depth in 1..min(check_depth,rock_formation.len()) {
+fn update_accessibility(rock_formation: &mut VecDeque<u32>) {
+    for depth in 1..rock_formation.len() {
         let row_above = rock_formation[depth - 1];
         let row = rock_formation[depth];
         rock_formation[depth] |= row_above & ((row >> 1) | (row_above >> 1)) & ((row << 1) | (row_above << 1)) & MASK;
-        if row != rock_formation[depth] {
-            check_deeper = true;
-        }
-    }
-    if check_deeper {
-        for depth in check_depth..rock_formation.len() {
-            let row_above = rock_formation[depth - 1];
-            let row = rock_formation[depth];
-            rock_formation[depth] |= row_above & ((row >> 1) | (row_above >> 1)) & ((row << 1) | (row_above << 1)) & MASK;
-        }
     }
 }
 fn drop_inaccessible(rock_formation: &mut VecDeque<u32>) -> usize {
@@ -216,7 +205,7 @@ fn rock_pile_height(
         let depth = fall_until_stagnant(&mut shape, &mut directions, &mut rock_formation);
         add_shape_to_rock_formation(&mut rock_formation, &mut shape, depth);
         max_memory_length = max(max_memory_length, rock_formation.len());
-        update_accessibility(&mut rock_formation, 10);
+        // update_accessibility(&mut rock_formation);
         pile_height += drop_inaccessible(&mut rock_formation);
     }
     println!("{}", max_memory_length);

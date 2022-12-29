@@ -17,11 +17,12 @@ mod day14;
 mod day15;
 mod day16;
 mod day17;
+mod day18;
 
 mod day25;
 
 fn main() {
-    let res = day17::main();
+    let res = day18::main();
     println!("Result of the day: {}", res);
     // let res_bonus = day15::main_bonus();
     // println!("Bonus result of the day: {}", res_bonus);
